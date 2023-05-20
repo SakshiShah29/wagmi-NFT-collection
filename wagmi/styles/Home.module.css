@@ -1,0 +1,46 @@
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  padding-top: 5em;
+  text-align: center;
+}
+
+.container>* {
+  margin: auto;
+  padding: 1em;
+}
+
+.activeConnector {
+  font-size: 1.2em;
+}
+
+.activeConnector span {
+  color: blueviolet;
+  text-transform: capitalize;
+}
+
+.Balance h3 {
+  font-size: 1.3em;
+}
+
+.Balance span {
+  font-size: 1em;
+  color: blueviolet;
+
+}
+
+.Current_chain {
+  font-weight: 600;
+  font-size: 1.2em;
+}
+
+.Current_chain span {
+  color: blueviolet;
+  font-size: 1em;
+}
+.error{
+  color: red;
+  font-weight: 00;
+}
