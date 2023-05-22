@@ -1,46 +1,98 @@
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import type { NextPage } from 'next';
-import Head from 'next/head';
-import styles from '../styles/Home.module.css';
-import { useAccount, useBalance, useConnect, useContractWrite, useNetwork, usePrepareContractWrite, useWaitForTransaction } from 'wagmi';
-import { useEffect, useState } from 'react';
-import {NFTS_CONTRACT_ADDRESS,abi} from "../constants/index"
-import { parseEther } from 'viem';
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import type { NextPage } from "next";
+import Head from "next/head";
+import styles from "../styles/Home.module.css";
+import {
+  useAccount,
+  useBalance,
+  useConnect,
+  useContractRead,
+  useContractWrite,
+  useNetwork,
+  usePrepareContractWrite,
+  useWaitForTransaction,
+} from "wagmi";
+import { useIsMounted } from "../hooks/useIsMounted";
+import { readContract } from "@wagmi/core";
+import { useEffect, useState } from "react";
+import { NFTS_CONTRACT_ADDRESS, abi } from "../constants/index";
+import { parseEther } from "viem";
 const Home: NextPage = () => {
+  const isMounted = useIsMounted();
+  const [presaleStarted, setPresaleStarted] = useState(false);
+  const [contractOwner, setContractOwner] = useState(false);
+  const { address, connector: activeConnector, isConnected } = useAccount();
 
+  const { error } = useConnect();
 
+  const { chain, chains } = useNetwork();
 
- const {address, connector:activeConnector,isConnected}=useAccount();
-
- const {error}=useConnect();
-
- const {chain,chains}=useNetwork();
-
- 
-
- const [hasMounted, setHasMounted] = useState(false);
- useEffect(() => {
-   setHasMounted(true);
- }, []);
- if(!hasMounted){
-  return null;
- }
- 
-
- /**
+  /**
    * presaleMint: Mint an NFT during the presale
    */
-  const {config}=usePrepareContractWrite({
-    address:NFTS_CONTRACT_ADDRESS,
-    abi:abi,
-    functionName:"presaleMint",
+  const { config: presaleConfig } = usePrepareContractWrite({
+    address: NFTS_CONTRACT_ADDRESS,
+    abi: abi,
+    functionName: "presaleMint",
   });
-  const {  write,data } = useContractWrite(config);
- 
-  const { isLoading, isSuccess } = useWaitForTransaction({
-    hash: data?.hash,
-  });
+  const { write: presaleWrite, data: presaleData } =
+    useContractWrite(presaleConfig);
 
+  const { isLoading: presaleTxLoading, isSuccess: presaleMintSuccess } =
+    useWaitForTransaction({
+      hash: presaleData?.hash,
+    });
+
+  /**
+   * publicMint: Mint an NFT after the presale
+   */
+
+  const { config: mintConfig } = usePrepareContractWrite({
+    address: NFTS_CONTRACT_ADDRESS,
+    abi: abi,
+    functionName: "mint",
+  });
+  const { write: publicWrite, data: publicData } = useContractWrite(mintConfig);
+
+  const { isLoading: publicTxLoading, isSuccess: publicMintSuccess } =
+    useWaitForTransaction({
+      hash: publicData?.hash,
+    });
+
+  /**
+   * getOwner: calls the contract to retrieve the owner
+   */
+  const ownerAddress = useContractRead({
+    address: NFTS_CONTRACT_ADDRESS,
+    abi: abi,
+    functionName: "owner",
+    onSuccess(data) {
+      console.log("Owner data:", data);
+    },
+  });
+  console.log(ownerAddress.data);
+  useEffect(() => {
+    if (address === ownerAddress.data) {
+      setContractOwner(true);
+    }
+  }, []);
+
+  /**
+   * startPresale: starts the presale for the NFT Collection
+   */
+
+  const { config: startPresaleConfig } = usePrepareContractWrite({
+    address: NFTS_CONTRACT_ADDRESS,
+    abi: abi,
+    functionName: "startPresale",
+  });
+  const { write: startPresaleWrite, data: startPresaleData } =
+    useContractWrite(startPresaleConfig);
+
+  const { isLoading: startPresaleTxLoading, isSuccess: presaleStartSuccess } =
+    useWaitForTransaction({
+      hash: startPresaleData?.hash,
+    });
 
   return (
     <div className={styles.container}>
@@ -54,34 +106,71 @@ const Home: NextPage = () => {
       </Head>
 
       <main className={styles.main}>
-        <div className='container'>
-        <ConnectButton />
-        {isConnected?(
-          <div>
-            <button disabled={!write} onClick={() => write?.()}>Mint</button>
-          </div>
-        ):(
-          <h2>Not Connected</h2>
-        )}
+        <div className="container">
+          <ConnectButton />
+          {isConnected && isMounted ? (
+            <div>
+              {/* Presale Minting button */}
+              {presaleStarted && (
+                <button
+                  disabled={!presaleWrite || presaleTxLoading}
+                  onClick={() => presaleWrite?.()}
+                >
+                  {presaleTxLoading ? "Minting..." : "Mint"}
+                </button>
+              )}
+              {presaleStarted && presaleMintSuccess && (
+                <h3>Successfully minted your presale nft!</h3>
+              )}
+
+              {/* Public Minting button */}
+              {!presaleStarted && (
+                <button
+                  disabled={!presaleWrite || presaleTxLoading}
+                  onClick={() => presaleWrite?.()}
+                >
+                  {publicTxLoading ? "Minting..." : "Mint"}
+                </button>
+              )}
+              {!presaleStarted && publicMintSuccess && (
+                <h3>Successfully minted your nft!</h3>
+              )}
+
+              {contractOwner && (
+                <button
+                  disabled={!startPresaleWrite || startPresaleTxLoading}
+                  onClick={() => {
+                    startPresaleWrite?.();
+                    setPresaleStarted(true);
+                  }}
+                >
+                  {startPresaleTxLoading
+                    ? "Presale Started..."
+                    : "start Presale"}
+                </button>
+              )}
+            </div>
+          ) : (
+            <h2>Not Connected</h2>
+          )}
         </div>
 
-        <section className='Balance'>
+        <section className="Balance">
           <h3>
-            Balance: {" "}
-            <span>
-              
-            </span>
-
+            Balance: <span></span>
           </h3>{" "}
         </section>
 
-        {chains && 
-        <div className='Current_chain'>
-          Current chain:
-          {isConnected?(
-            <span>{chains.map((chain)=>chain.name)}</span>
-          ):("Connect Wallet")}</div>}
-        
+        {chains && (
+          <div className="Current_chain">
+            Current chain:
+            {isConnected ? (
+              <span>{chains.map((chain) => chain.name)}</span>
+            ) : (
+              "Connect Wallet"
+            )}
+          </div>
+        )}
       </main>
 
       <p className="error">{error && <span>{error.message}</span>}</p>
