@@ -17,10 +17,12 @@ import { readContract } from "@wagmi/core";
 import { useEffect, useState } from "react";
 import { NFTS_CONTRACT_ADDRESS, abi } from "../constants/index";
 import { parseEther } from "viem";
+
 const Home: NextPage = () => {
   const isMounted = useIsMounted();
   const [presaleStarted, setPresaleStarted] = useState(false);
   const [contractOwner, setContractOwner] = useState(false);
+  const [totalTokensMinted, setTotalTokensMinted] = useState(0);
   const { address, connector: activeConnector, isConnected } = useAccount();
 
   const { error } = useConnect();
@@ -30,11 +32,13 @@ const Home: NextPage = () => {
   /**
    * presaleMint: Mint an NFT during the presale
    */
-  const { config: presaleConfig } = usePrepareContractWrite({
-    address: NFTS_CONTRACT_ADDRESS,
-    abi: abi,
-    functionName: "presaleMint",
-  });
+  const { config: presaleConfig, error: contractPresaleError } =
+    usePrepareContractWrite({
+      address: NFTS_CONTRACT_ADDRESS,
+      abi: abi,
+      functionName: "presaleMint",
+      value: parseEther("0.001"),
+    });
   const { write: presaleWrite, data: presaleData } =
     useContractWrite(presaleConfig);
 
@@ -42,16 +46,26 @@ const Home: NextPage = () => {
     useWaitForTransaction({
       hash: presaleData?.hash,
     });
+  // const presaleMint = async () => {
+  //   await presaleWrite?.();
+  //   if(presaleMintSuccess){
+  //         window.alert("Successfully minted the presale nft!")
+  //       }else{
+  //         window.alert("presale mint error!");
+  //       }
+
+  // };
 
   /**
    * publicMint: Mint an NFT after the presale
    */
-
-  const { config: mintConfig } = usePrepareContractWrite({
-    address: NFTS_CONTRACT_ADDRESS,
-    abi: abi,
-    functionName: "mint",
-  });
+  const { config: mintConfig, error: publicMintContractError } =
+    usePrepareContractWrite({
+      address: NFTS_CONTRACT_ADDRESS,
+      abi: abi,
+      functionName: "mint",
+      value: parseEther("0.001"),
+    });
   const { write: publicWrite, data: publicData } = useContractWrite(mintConfig);
 
   const { isLoading: publicTxLoading, isSuccess: publicMintSuccess } =
@@ -71,21 +85,35 @@ const Home: NextPage = () => {
     },
   });
   console.log(ownerAddress.data);
+
   useEffect(() => {
     if (address === ownerAddress.data) {
       setContractOwner(true);
     }
   }, []);
-
+  /**
+   * tokenIds: calls the contract to retrieve the tokenIds
+   */
+  const tokenIDs = useContractRead({
+    address: NFTS_CONTRACT_ADDRESS,
+    abi: abi,
+    functionName: "tokenIds",
+    onSuccess(data: string) {
+      console.log("token data:", parseInt(data));
+    },
+  });
+  useEffect(() => {
+    setTotalTokensMinted(parseInt(tokenIDs?.data));
+  }, [setTotalTokensMinted]);
   /**
    * startPresale: starts the presale for the NFT Collection
    */
-
-  const { config: startPresaleConfig } = usePrepareContractWrite({
-    address: NFTS_CONTRACT_ADDRESS,
-    abi: abi,
-    functionName: "startPresale",
-  });
+  const { config: startPresaleConfig, error: contractStartPresaleError } =
+    usePrepareContractWrite({
+      address: NFTS_CONTRACT_ADDRESS,
+      abi: abi,
+      functionName: "startPresale",
+    });
   const { write: startPresaleWrite, data: startPresaleData } =
     useContractWrite(startPresaleConfig);
 
@@ -93,6 +121,13 @@ const Home: NextPage = () => {
     useWaitForTransaction({
       hash: startPresaleData?.hash,
     });
+  // const startPresale=async()=>{
+  //   await startPresaleWrite?.();
+  //   if(startPresaleTxLoading){
+  //     window.alert("Presale Started!");
+  //   }
+  //   setPresaleStarted(true);
+  // }
 
   return (
     <div className={styles.container}>
@@ -105,73 +140,88 @@ const Home: NextPage = () => {
         <link href="/favicon.ico" rel="icon" />
       </Head>
 
-      <main className={styles.main}>
-        <div className="container">
-          <ConnectButton />
-          {isConnected && isMounted ? (
-            <div>
-              {/* Presale Minting button */}
-              {presaleStarted && (
-                <button
-                  disabled={!presaleWrite || presaleTxLoading}
-                  onClick={() => presaleWrite?.()}
-                >
-                  {presaleTxLoading ? "Minting..." : "Mint"}
-                </button>
-              )}
-              {presaleStarted && presaleMintSuccess && (
-                <h3>Successfully minted your presale nft!</h3>
-              )}
-
-              {/* Public Minting button */}
-              {!presaleStarted && (
-                <button
-                  disabled={!presaleWrite || presaleTxLoading}
-                  onClick={() => presaleWrite?.()}
-                >
-                  {publicTxLoading ? "Minting..." : "Mint"}
-                </button>
-              )}
-              {!presaleStarted && publicMintSuccess && (
-                <h3>Successfully minted your nft!</h3>
-              )}
-
-              {contractOwner && (
-                <button
-                  disabled={!startPresaleWrite || startPresaleTxLoading}
-                  onClick={() => {
-                    startPresaleWrite?.();
-                    setPresaleStarted(true);
-                  }}
-                >
-                  {startPresaleTxLoading
-                    ? "Presale Started..."
-                    : "start Presale"}
-                </button>
-              )}
-            </div>
-          ) : (
-            <h2>Not Connected</h2>
-          )}
-        </div>
-
-        <section className="Balance">
-          <h3>
-            Balance: <span></span>
-          </h3>{" "}
-        </section>
-
-        {chains && (
-          <div className="Current_chain">
-            Current chain:
+      {isMounted && (
+        <main className={styles.main}>
+          <div className="container">
+            <ConnectButton />
             {isConnected ? (
-              <span>{chains.map((chain) => chain.name)}</span>
+              <div>
+                <p>Total nfts minted are :{totalTokensMinted}</p>
+                {/* Presale Minting button */}
+                {presaleStarted && !presaleTxLoading && (
+                  <button onClick={() => presaleWrite?.()}>Presale Mint</button>
+                )}
+                {presaleTxLoading && presaleData && (
+                  <p>The transaction was sent! The hash:{presaleData.hash}</p>
+                )}
+                {contractPresaleError && (
+                  <p>
+                    Calling the presale minting function will fail for this
+                    reason:{contractPresaleError.message}
+                  </p>
+                )}
+                {presaleMintSuccess && <p>You successfully minted an nft!</p>}
+
+                {/* Public Minting button */}
+                {!presaleStarted && !publicTxLoading && (
+                  <button onClick={() => publicWrite?.()}>Public Mint</button>
+                )}
+                {publicTxLoading && publicData && (
+                  <p>The transaction was sent! The hash:{publicData.hash}</p>
+                )}
+                {publicMintContractError && (
+                  <p>
+                    Calling the presale minting function will fail for this
+                    reason:{publicMintContractError.message}
+                  </p>
+                )}
+                {publicMintSuccess && <p>You successfully minted an nft!</p>}
+
+                {contractOwner && !startPresaleTxLoading && (
+                  <button
+                    onClick={() => {
+                      startPresaleWrite?.();
+                      setPresaleStarted(true);
+                    }}
+                  >
+                    Start Presale
+                  </button>
+                )}
+                {startPresaleTxLoading && startPresaleData && (
+                  <p>
+                    The transaction was sent! The hash:{startPresaleData.hash}
+                  </p>
+                )}
+                {contractStartPresaleError && (
+                  <p>
+                    Calling the presale minting function will fail for this
+                    reason:{contractStartPresaleError.message}
+                  </p>
+                )}
+              </div>
             ) : (
-              "Connect Wallet"
+              <h2>Not Connected</h2>
             )}
           </div>
-        )}
-      </main>
+
+          <section className="Balance">
+            <h3>
+              Balance: <span></span>
+            </h3>{" "}
+          </section>
+
+          {chains && (
+            <div className="Current_chain">
+              Current chain:
+              {isConnected ? (
+                <span>{chains.map((chain) => chain.name)}</span>
+              ) : (
+                "Connect Wallet"
+              )}
+            </div>
+          )}
+        </main>
+      )}
 
       <p className="error">{error && <span>{error.message}</span>}</p>
       {/* End of component */}
